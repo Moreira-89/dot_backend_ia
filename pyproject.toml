@@ -1,0 +1,12 @@
+[tool.ruff.lint.flake8-bugbear]
+# Depends()/Query()/... do FastAPI precisam ficar no default do parâmetro
+# (é assim que a injeção de dependência funciona), então a regra B008
+# ("no function calls in default arguments") gera falso positivo aqui.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Header",
+    "fastapi.Cookie",
+]
