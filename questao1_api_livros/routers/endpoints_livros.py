@@ -1,5 +1,5 @@
 from database import get_async_session
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from models import Livro
 from schemas import LivroCreateSchema, LivroResponseSchema
 from sqlalchemy import select
@@ -8,12 +8,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 router = APIRouter(prefix="/livros", tags=["Livros"])
 
 
-# Cria um livro novo a partir do payload validado por LivroCreateSchema e
-# devolve o registro já com o "id" gerado pelo banco (LivroResponseSchema).
-@router.post("/", response_model=LivroResponseSchema, status_code=201)
+@router.post(
+    "/",
+    response_model=LivroResponseSchema,
+    status_code=status.HTTP_201_CREATED,
+    summary="Cadastrar um novo livro",
+    responses={
+        status.HTTP_409_CONFLICT: {
+            "description": "Já existe um livro cadastrado com o mesmo título e autor."
+        }
+    },
+)
 async def criar_livro(
     livro: LivroCreateSchema, session: AsyncSession = Depends(get_async_session)
 ):
+    """Cadastra um livro novo a partir de título, autor, data de publicação e resumo.
+
+    Retorna o registro criado, já com o `id` gerado pelo banco. Rejeita com
+    `409 Conflict` se já existir um livro com o mesmo título e autor.
+    """
     # Impede cadastro duplicado do mesmo título+autor.
     # OBS: checagem em duas etapas (SELECT depois INSERT) — sob concorrência
     # (duas requisições simultâneas para o mesmo livro), ainda é possível
@@ -38,14 +51,26 @@ async def criar_livro(
     return novo_livro
 
 
-# Lista os livros cadastrados, com filtros opcionais e case-insensitive
-# (ilike) por título e/ou autor via query params.
-@router.get("/", response_model=list[LivroResponseSchema])
+@router.get(
+    "/",
+    response_model=list[LivroResponseSchema],
+    summary="Consultar livros por título e/ou autor",
+)
 async def listar_livros(
-    titulo: str | None = None,
-    autor: str | None = None,
+    titulo: str | None = Query(
+        default=None, description="Filtra por título (busca parcial, case-insensitive)."
+    ),
+    autor: str | None = Query(
+        default=None, description="Filtra por autor (busca parcial, case-insensitive)."
+    ),
     session: AsyncSession = Depends(get_async_session),
 ):
+    """Lista os livros cadastrados.
+
+    Sem parâmetros, retorna todos os livros. Se `titulo` e/ou `autor` forem
+    informados, filtra por correspondência parcial (`ILIKE %valor%`) em cada
+    um; quando os dois são informados, os filtros são combinados com `AND`.
+    """
     query = select(Livro)
     if titulo is not None:
         query = query.where(Livro.titulo.ilike(f"%{titulo}%"))
