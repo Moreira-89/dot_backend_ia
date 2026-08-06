@@ -1,19 +1,30 @@
-# Dependências diretas
+# Dependências diretas (produção)
 fastapi==0.141.1
 uvicorn==0.52.1
 pydantic==2.13.4
 SQLAlchemy==2.0.51
 aiosqlite==0.22.1
 
+# Dependências diretas (testes)
+pytest==9.1.1
+pytest-asyncio==1.4.0
+httpx==0.28.1
+
 # Dependências transitivas (instaladas automaticamente pelas acima)
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.14.2
+certifi==2026.7.22
 click==8.4.2
 greenlet==3.5.4
 h11==0.16.0
+httpcore==1.0.9
 idna==3.18
+iniconfig==2.3.0
+packaging==26.3
+pluggy==1.6.0
 pydantic_core==2.46.4
+Pygments==2.20.0
 starlette==1.4.1
 typing-inspection==0.4.2
 typing_extensions==4.16.0

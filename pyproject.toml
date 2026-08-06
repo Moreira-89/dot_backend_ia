@@ -1,3 +1,7 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["questao1_api_livros/tests"]
+
 [tool.ruff.lint.flake8-bugbear]
 # Depends()/Query()/... do FastAPI precisam ficar no default do parâmetro
 # (é assim que a injeção de dependência funciona), então a regra B008
