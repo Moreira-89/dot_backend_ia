@@ -174,3 +174,7 @@ Configuração em `pyproject.toml`: `asyncio_mode = "auto"` (dispensa `@pytest.m
 - **Sem paginação em `GET /livros/`.** A listagem devolve todos os resultados de uma vez; aceitável para o volume de dados deste exercício, mas não escalaria para uma tabela grande.
 - **Sem migrations.** As tabelas são criadas via `create_all` no startup; qualquer mudança de schema em um banco já existente exigiria apagar o `banco.db` ou introduzir uma ferramenta como Alembic.
 - **Imports absolutos ("soltos"), não relativos.** Módulos como `database`, `models`, `schemas` e `routers.endpoints_livros` são importados como se `questao1_api_livros/` fosse a raiz do projeto. Por isso a aplicação (e os testes) precisam ser executados com essa pasta no `sys.path` — daí o `cd questao1_api_livros` antes do `uvicorn` e o `tests/__init__.py`, que faz o pytest inserir automaticamente essa pasta no `sys.path`.
+
+---
+
+[Questão 2 — Chatbot com LangChain](questao2_chatbot_langchain.md) ➡
