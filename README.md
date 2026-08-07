@@ -5,7 +5,7 @@ Desafio técnico Backend + IA: API de livros, chatbot com Langchain e busca sem�
 ## Requisitos
 
 - Python 3.14+
-- Uma única dependência instalada cobre as três questões:
+- Um único `requirements.txt` cobre as três questões:
 
 ```bash
 python3 -m venv .venv

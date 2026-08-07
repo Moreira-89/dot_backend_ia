@@ -1,8 +1,8 @@
-"""Conjunto fixo de documentos usados como base para a busca semântica.
+"""Documentos fixos usados na busca, embutidos aqui em vez de raspados de
+algum blog real — assim o exercício roda sem depender de internet.
 
-Documentos embutidos no repositório (não obtidos via scraping externo) para garantir reprodutibilidade: o avaliador roda o exercício sem depender de internet ou da estrutura de um site externo que pode mudar ou cair.
-
-Cada documento é um post curto de blog técnico sobre um tema de programação, com títulos e conteúdos deliberadamente distintos entre si — para que a busca semântica tenha o que diferenciar (ex.: "listas em Python" vs "índices em banco de dados" não devem ser confundidos apesar de ambos mencionarem dados).
+Os temas são bem diferentes entre si de propósito, pra dar pro embedding
+algo de fato pra diferenciar.
 """
 
 from dataclasses import dataclass

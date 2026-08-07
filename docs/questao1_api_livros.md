@@ -56,12 +56,11 @@ Tabela `livros` (`questao1_api_livros/models.py`):
 | `data_publicacao` | `DATE` | obrigatório |
 | `resumo` | `TEXT` | obrigatório |
 
-As tabelas são criadas automaticamente na inicialização da aplicação, via `Base.metadata.create_all` executado dentro do `lifespan` do FastAPI (`main.py`) — não há migrations (Alembic) neste exercício.
+As tabelas são criadas automaticamente na inicialização da aplicação, via `Base.metadata.create_all` dentro do `lifespan` do FastAPI (`main.py`) — sem migrations (Alembic) neste exercício.
 
 ## Schemas (Pydantic)
 
-- **`LivroCreateSchema`** — payload de entrada do `POST /livros/`: `titulo`, `autor`, `data_publicacao`, `resumo`. Não inclui `id` (gerado pelo banco). Tem `json_schema_extra` com um exemplo exibido no Swagger.
-- **`LivroResponseSchema`** — payload de saída (herda de `LivroCreateSchema` e acrescenta `id`). Usa `model_config = ConfigDict(from_attributes=True)` para ser construído diretamente a partir do objeto ORM retornado pelo SQLAlchemy, sem precisar convertê-lo manualmente em dict.
+`LivroCreateSchema` é o payload de entrada do `POST /livros/`: `titulo`, `autor`, `data_publicacao`, `resumo`, sem `id` (esse o banco gera). Tem `json_schema_extra` com um exemplo pro Swagger. `LivroResponseSchema` herda dele e acrescenta o `id` — usa `model_config = ConfigDict(from_attributes=True)` pra ser construído direto a partir do objeto ORM que o SQLAlchemy retorna, sem precisar converter manualmente em dict.
 
 ## Endpoints
 
@@ -88,7 +87,7 @@ Cria um novo livro.
 
 ### `GET /livros/` — Consultar livros
 
-Lista livros cadastrados, com filtros **opcionais** por título e/ou autor.
+Lista livros cadastrados, com filtros opcionais por título e/ou autor.
 
 **Query params:**
 
@@ -97,7 +96,7 @@ Lista livros cadastrados, com filtros **opcionais** por título e/ou autor.
 | `titulo` | `string` | não | Busca parcial e case-insensitive (`ILIKE %titulo%`) |
 | `autor` | `string` | não | Busca parcial e case-insensitive (`ILIKE %autor%`) |
 
-Sem parâmetros, retorna todos os livros cadastrados. Os dois filtros podem ser combinados (aplicados com `AND`).
+Sem parâmetros, retorna todos os livros. Os dois filtros podem ser combinados (aplicados com `AND`).
 
 **Exemplos:**
 ```
@@ -118,9 +117,7 @@ Com a aplicação rodando, o FastAPI expõe automaticamente:
 
 ## Banco de dados
 
-- **Produção**: SQLite em arquivo, `questao1_api_livros/banco.db`, acessado via `sqlite+aiosqlite:///./banco.db` (driver assíncrono `aiosqlite`).
-- **Sessão por requisição**: a dependency `get_async_session` (`database.py`) abre uma `AsyncSession` por request e garante o fechamento ao final via `async with`.
-- **Testes**: cada teste usa um banco SQLite **em memória** (`sqlite+aiosqlite:///:memory:`), isolado do `banco.db` real — ver seção [Testes](#testes).
+Em produção o banco é SQLite em arquivo (`questao1_api_livros/banco.db`), acessado via `sqlite+aiosqlite:///./banco.db`. A dependency `get_async_session` (`database.py`) abre uma `AsyncSession` por request e fecha ao final via `async with`. Nos testes, cada um usa um banco SQLite **em memória** (`sqlite+aiosqlite:///:memory:`), isolado do `banco.db` real — mais detalhes na seção [Testes](#testes).
 
 ## Como rodar
 
@@ -144,10 +141,9 @@ Testes de integração dos endpoints, usando `httpx.AsyncClient` (via `ASGITrans
 
 ### Como funciona (`tests/conftest.py`)
 
-- **`test_session`**: cria um engine SQLite `:memory:` com `poolclass=StaticPool` (necessário porque o banco `:memory:` só existe enquanto a conexão está aberta — sem `StaticPool`, cada checkout do pool abriria uma conexão nova e "esqueceria" os dados). Cria as tabelas antes do teste e as remove depois.
-- **`client`**: sobrescreve a dependency `get_async_session` da aplicação com `app.dependency_overrides`, apontando para a sessão de teste — sem alterar nenhum código de produção. Devolve um `AsyncClient` que fala diretamente com a instância do FastAPI em memória.
+A fixture `test_session` cria um engine SQLite `:memory:` com `poolclass=StaticPool` — necessário porque um banco `:memory:` só existe enquanto a conexão está aberta; sem `StaticPool`, cada checkout do pool abriria uma conexão nova e "esqueceria" os dados. Ela cria as tabelas antes do teste e remove depois. Já a fixture `client` sobrescreve a dependency `get_async_session` da aplicação com `app.dependency_overrides`, apontando pra sessão de teste sem tocar em nenhum código de produção, e devolve um `AsyncClient` conversando direto com a instância do FastAPI em memória.
 
-Como o `lifespan` da aplicação (que cria as tabelas no `banco.db` real) só é acionado sob o protocolo ASGI de lifespan — que o `ASGITransport` não dispara — o banco de produção nunca é tocado pelos testes.
+O `lifespan` da aplicação (que cria as tabelas no `banco.db` real) só dispara sob o protocolo ASGI de lifespan, que o `ASGITransport` não aciona — então o banco de produção nunca é tocado pelos testes.
 
 ### Casos cobertos (`tests/test_livros.py`)
 
@@ -170,10 +166,11 @@ Configuração em `pyproject.toml`: `asyncio_mode = "auto"` (dispensa `@pytest.m
 
 ## Decisões de projeto e limitações conhecidas
 
-- **Prevenção de duplicatas é feita na aplicação, não no banco.** `criar_livro` faz um `SELECT` por `titulo`+`autor` antes do `INSERT`. Sob concorrência (duas requisições simultâneas para o mesmo livro), ainda é possível criar duplicatas, pois não há `UniqueConstraint` no banco garantindo isso. Suficiente para o escopo do exercício; em produção, o ideal seria adicionar a constraint e tratar o `IntegrityError`.
-- **Sem paginação em `GET /livros/`.** A listagem devolve todos os resultados de uma vez; aceitável para o volume de dados deste exercício, mas não escalaria para uma tabela grande.
-- **Sem migrations.** As tabelas são criadas via `create_all` no startup; qualquer mudança de schema em um banco já existente exigiria apagar o `banco.db` ou introduzir uma ferramenta como Alembic.
-- **Imports absolutos ("soltos"), não relativos.** Módulos como `database`, `models`, `schemas` e `routers.endpoints_livros` são importados como se `questao1_api_livros/` fosse a raiz do projeto. Por isso a aplicação (e os testes) precisam ser executados com essa pasta no `sys.path` — daí o `cd questao1_api_livros` antes do `uvicorn` e o `tests/__init__.py`, que faz o pytest inserir automaticamente essa pasta no `sys.path`.
+A prevenção de duplicatas acontece na aplicação, não no banco: `criar_livro` faz um `SELECT` por `titulo`+`autor` antes do `INSERT`. Sob concorrência (duas requisições simultâneas pro mesmo livro), ainda dá pra criar duplicata, porque não existe `UniqueConstraint` garantindo isso no schema. Suficiente pro escopo do exercício; em produção eu adicionaria a constraint e trataria o `IntegrityError`.
+
+`GET /livros/` não tem paginação — devolve tudo de uma vez, o que é aceitável pro volume de dados daqui mas não escalaria pra uma tabela grande. Também não há migrations: as tabelas nascem via `create_all` no startup, e qualquer mudança de schema num banco já existente exigiria apagar o `banco.db` ou introduzir algo como Alembic.
+
+Por fim, os imports são absolutos, não relativos: módulos como `database`, `models`, `schemas` e `routers.endpoints_livros` são importados como se `questao1_api_livros/` fosse a raiz do projeto. É por isso que a aplicação (e os testes) precisam rodar com essa pasta no `sys.path` — daí o `cd questao1_api_livros` antes do `uvicorn`, e o `tests/__init__.py`, que faz o pytest inserir essa pasta no `sys.path` automaticamente.
 
 ---
 

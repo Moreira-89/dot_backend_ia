@@ -25,12 +25,15 @@ Sistema de busca semântica sobre um conjunto fixo de documentos, usando embeddi
 
 ## Decisões de projeto
 
-| Decisão | Escolha | Justificativa |
-|---|---|---|
-| Fonte dos documentos | Fixos, embutidos no repositório (não scraping externo) | Reprodutibilidade — o avaliador roda sem depender de internet/estrutura de site externo, que pode mudar ou cair. |
-| Modelo de embeddings | OpenAI `text-embedding-3-small` | Já havia integração e chave de API configurada na Questão 2; evita dependência pesada (`torch`/`sentence-transformers`) só para uma etapa do teste. O enunciado sugere `transformers` como dica, não obrigação. |
-| Vector store | FAISS | Citado explicitamente no enunciado ("FAISS ou Milvus"); é biblioteca local (sem servidor), mais simples de rodar que Milvus (que exige infraestrutura via Docker) — adequado ao escopo de um teste técnico. |
-| Persistência do índice | Reconstruído a cada execução (não salvo em disco) | Volume pequeno de documentos fixos torna o custo de reprocessamento aceitável; evita a complexidade extra de salvar/carregar o índice do FAISS do disco. |
+Os documentos são fixos, embutidos em `documentos.py`, em vez de raspados de um blog real — o enunciado permite qualquer conjunto de textos, e usar algo fixo evita que o exercício dependa de internet ou de uma página que pode mudar de conteúdo (ou sair do ar) depois de entregue.
+
+Pra embeddings, usei o `text-embedding-3-small` da OpenAI. Já tinha chave e integração configuradas por causa da Questão 2, então não fazia sentido puxar `torch`/`sentence-transformers` só pra essa etapa — o enunciado cita `transformers` como sugestão, não como exigência.
+
+FAISS entra porque o próprio enunciado já dá as duas opções (FAISS ou Milvus), e FAISS roda local, sem precisar subir infraestrutura via Docker como o Milvus pede. Pra um teste técnico, isso poupa tempo de setup sem abrir mão do que o enunciado pede.
+
+O índice é reconstruído a cada execução, sem salvar em disco. Com 8 documentos o reprocessamento é instantâneo, então não valia a pena a complexidade extra do `save_local`/`load_local` do FAISS.
+
+Vale registrar que `similarity_search_with_score` do FAISS retorna distância L2, não similaridade de cosseno — então, ao contrário do que a intuição sugere, quanto **menor** a pontuação, mais relevante o resultado (é assim que a coluna "Distância" nos exemplos abaixo deve ser lida).
 
 ## Estrutura de arquivos
 
@@ -43,15 +46,13 @@ questao3_busca_semantica/
 └── .env.example         # Modelo de variáveis de ambiente (OPENAI_API_KEY)
 ```
 
-Não há testes automatizados neste exercício (mesma decisão da Questão 2).
+Sem testes automatizados neste exercício, mesma decisão da Questão 2 — `buscar()` e `construir_indice()` ficaram como funções isoladas justamente pra dar pra testar depois, se precisar.
 
 ## Como funciona
 
-### `documentos.py` — Base de documentos
+`documentos.py` define `DOCUMENTOS`, uma lista de 8 posts curtos sobre temas técnicos bem distintos entre si (Python, POO, banco de dados, APIs REST, embeddings, ambientes virtuais, testes, Docker). A ideia de misturar temas tão diferentes é forçar a busca a diferenciar coisas que até compartilham palavras — "lista" e "índice", por exemplo, os dois remetem a "dados", mas são assuntos bem separados.
 
-Define `DOCUMENTOS`, uma lista fixa de 8 posts curtos de blog técnico, cada um como um `Documento` (dataclass com `titulo` e `conteudo`). Os temas foram escolhidos deliberadamente distintos entre si (Python, orientação a objetos, banco de dados, APIs REST, embeddings, ambientes virtuais, testes, Docker) para que a busca semântica tenha o que diferenciar — por exemplo, "listas em Python" e "índices em banco de dados" não devem ser confundidos apesar de ambos mencionarem "dados".
-
-### `indexador.py` — Geração de embeddings e montagem do índice
+`indexador.py` transforma cada `Documento` num `Document` do LangChain (o texto vira `page_content`, o título vai pro `metadata`) e monta o índice:
 
 ```python
 def construir_indice() -> FAISS:
@@ -63,9 +64,7 @@ def construir_indice() -> FAISS:
     return FAISS.from_documents(documentos_langchain, embeddings)
 ```
 
-Cada `Documento` fixo vira um `Document` do LangChain, guardando o título no `metadata` (para exibição posterior) e o conteúdo como `page_content` (o texto que efetivamente vira embedding). `FAISS.from_documents(...)` chama o modelo de embeddings para cada documento e monta o índice vetorial em memória — sem servidor externo, sem persistência em disco.
-
-### `busca.py` — Função de busca semântica
+`busca.py` expõe `buscar()`, que embrulha o `similarity_search_with_score` do FAISS numa lista de `ResultadoBusca` (título, trecho, pontuação) — assim quem chama não precisa lidar com os objetos internos do LangChain:
 
 ```python
 def buscar(indice: FAISS, consulta: str, k: int = 3) -> list[ResultadoBusca]:
@@ -76,15 +75,7 @@ def buscar(indice: FAISS, consulta: str, k: int = 3) -> list[ResultadoBusca]:
     ]
 ```
 
-`similarity_search_with_score` gera o embedding da consulta e calcula a distância L2 entre ele e os embeddings dos documentos indexados — **quanto menor a pontuação, mais similar (mais relevante) o documento**. `buscar()` é o ponto único de integração com o índice, retornando uma lista de `ResultadoBusca` (título, trecho e pontuação) já pronta para exibição, em vez de expor os objetos internos do LangChain a quem chama a função.
-
-### `main.py` — Demonstração no terminal
-
-1. Carrega `OPENAI_API_KEY` do `.env` e valida sua presença antes de importar os módulos que dependem dela (mesmo padrão de guard usado na Questão 2).
-2. Chama `construir_indice()` uma única vez.
-3. Roda uma lista de consultas de exemplo (`CONSULTAS_EXEMPLO`) contra o índice, imprimindo os 3 documentos mais relevantes de cada uma em uma tabela (`rich.table.Table`).
-
-As consultas de exemplo usam vocabulário **deliberadamente diferente** do vocabulário dos documentos (ex.: "coleção de dados" em vez de "lista", "tabela grande" em vez de "índice") — o objetivo é evidenciar que a busca é por significado, e não por correspondência de palavra-chave.
+`main.py` valida a `OPENAI_API_KEY` antes de importar qualquer coisa que dependa dela (mesmo guard da Questão 2), constrói o índice uma vez e roda uma lista de consultas de exemplo, imprimindo os 3 resultados mais relevantes de cada uma numa tabela `rich`. As consultas de exemplo usam palavras diferentes das dos documentos — "coleção de dados" em vez de "lista", "tabela grande" em vez de "índice" — justamente pra mostrar que a busca funciona por significado, não por bater palavra-chave.
 
 ## Variáveis de ambiente
 
@@ -111,7 +102,7 @@ cp questao3_busca_semantica/.env.example questao3_busca_semantica/.env
 
 ## Exemplos de consulta e resultados
 
-Execução real de `python -m questao3_busca_semantica.main`, mostrando os 3 documentos mais relevantes retornados para cada consulta (pontuação = distância L2; menor é mais relevante). Em todas as 5 consultas, o documento correto ficou em primeiro lugar mesmo sem repetir o vocabulário exato do texto original.
+Saída real de `python -m questao3_busca_semantica.main`, com os 3 documentos mais relevantes de cada consulta (lembrando: distância menor = mais relevante). Nas 5 consultas o documento certo ficou em primeiro, mesmo sem repetir o vocabulário do texto original.
 
 ### 1. "Como faço para adicionar um elemento em uma coleção de dados em Python?"
 
@@ -153,13 +144,9 @@ Execução real de `python -m questao3_busca_semantica.main`, mostrando os 3 doc
 | 2 | Docker e Containers para Desenvolvimento | 1.0281 |
 | 3 | Testes Automatizados com pytest | 1.4180 |
 
-## Decisões de projeto e limitações conhecidas
+## Limitações conhecidas
 
-- **Índice em memória, reconstruído a cada execução.** Sem persistência em disco (`FAISS.save_local`/`load_local`) — aceitável para 8 documentos fixos; em produção, com uma base maior, o índice seria persistido e apenas atualizado incrementalmente.
-- **Documentos fixos no código, não um dataset externo.** O enunciado sugere "um conjunto de artigos ou posts de um blog"; optou-se por embutir os textos em `documentos.py` em vez de fazer scraping de um blog real, para que o exercício rode de forma determinística e sem depender de rede ou de conteúdo que pode mudar.
-- **Distância L2, não similaridade de cosseno.** `similarity_search_with_score` do FAISS (índice padrão `IndexFlatL2`) retorna distância euclidiana entre os vetores — por isso a interpretação é "quanto menor, mais relevante", ao contrário de uma pontuação de similaridade tradicional (onde maior é melhor).
-- **`k` fixo em 3 nas consultas de exemplo.** `buscar()` aceita `k` como parâmetro (documentos mais relevantes a retornar), mas `main.py` sempre usa `k=3` para a demonstração.
-- **Sem testes automatizados.** Mesma decisão tomada na Questão 2: o exercício prioriza a demonstração end-to-end no terminal; `buscar()` e `construir_indice()` foram mantidos como funções isoladas justamente para serem testáveis no futuro (ex. usando um índice FAISS pequeno construído em memória durante o teste).
+`k` fica fixo em 3 nas consultas de exemplo, embora `buscar()` aceite qualquer valor. E, como já comentei, o índice não persiste em disco — numa base de documentos maior isso teria que mudar, com o índice sendo salvo e atualizado incrementalmente em vez de reconstruído do zero a cada execução.
 
 ---
 

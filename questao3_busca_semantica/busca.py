@@ -13,12 +13,10 @@ class ResultadoBusca:
 
 
 def buscar(indice: FAISS, consulta: str, k: int = 3) -> list[ResultadoBusca]:
-    """Retorna os `k` documentos mais relevantes para `consulta`.
+    """Retorna os k documentos mais relevantes pra consulta.
 
-    Usa `similarity_search_with_score`, que gera o embedding da consulta e
-    calcula a distância L2 entre ele e os embeddings dos documentos
-    indexados: quanto menor a pontuação, mais similar (mais relevante) o
-    documento é em relação à consulta.
+    A pontuação é distância L2 (via similarity_search_with_score), não
+    similaridade — quanto menor, mais parecido.
     """
     resultados = indice.similarity_search_with_score(consulta, k=k)
 

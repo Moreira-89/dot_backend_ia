@@ -44,11 +44,11 @@ def mostrar_resultados(console: Console, consulta: str, resultados: list[Resulta
 
 
 def main() -> None:
-    """Constrói o índice vetorial e demonstra a busca semântica com consultas de exemplo.
+    """Monta o índice e roda as consultas de exemplo.
 
-    As consultas de exemplo usam vocabulário deliberadamente diferente do dos
-    documentos (ex.: "coleção de dados" em vez de "lista") para evidenciar que
-    a busca é por significado, não por palavra-chave.
+    As consultas usam palavras diferentes das dos documentos de propósito
+    (ex. "coleção de dados" em vez de "lista"), pra mostrar que a busca é
+    por significado, não por palavra-chave.
     """
     console.print("[bold]Busca Semântica com FAISS + Embeddings.[/bold]")
     console.print("Gerando embeddings e construindo o índice vetorial...\n")

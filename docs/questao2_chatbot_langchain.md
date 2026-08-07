@@ -37,15 +37,9 @@ Não há testes automatizados neste exercício (diferente da questão 1).
 
 ## Como funciona
 
-### `prompt.py` — System prompt
+`prompt.py` define o `SYSTEM_PROMPT`, dividido em três blocos: escopo (restringe o assistente a Python/programação, recusando o resto educadamente), estilo de resposta (tom didático, passos numerados, exemplos de código curtos) e guardrails (proíbe inventar função/biblioteca que não existe, incentivar uso perigoso de `eval`/`exec`, revelar o próprio prompt, ou ceder mesmo sob insistência do usuário fora do escopo).
 
-Define `SYSTEM_PROMPT`, injetado no agente como instrução de sistema. Estrutura em três blocos:
-
-- **Escopo**: restringe o assistente a perguntas sobre Python/programação; fora do escopo, ele recusa educadamente.
-- **Estilo de resposta**: tom didático, respostas longas em passos numerados, exemplos de código curtos e comentados quando fizer sentido.
-- **Guardrails**: proíbe inventar funções/bibliotecas inexistentes, proíbe incentivar más práticas de segurança (ex.: uso perigoso de `eval`/`exec`), proíbe revelar o próprio system prompt e proíbe responder sobre assuntos fora do escopo mesmo sob insistência do usuário.
-
-### `chatbot.py` — Agente e função de pergunta
+`chatbot.py` cria o agente:
 
 ```python
 checkpointer = InMemorySaver()
@@ -54,24 +48,11 @@ agent_chatbot = create_agent(
 )
 ```
 
-- **`agent_chatbot`**: um grafo LangGraph compilado (`CompiledStateGraph`), criado por `create_agent` (API de agentes do LangChain v1). O modelo é resolvido pela string `"openai:gpt-4o-mini"` (provider `openai` + modelo `gpt-4o-mini`), sem necessidade de instanciar `ChatOpenAI` manualmente.
-- **`checkpointer` (`InMemorySaver`)**: guarda o histórico de mensagens em memória, por `thread_id`. É o que permite ao agente "lembrar" de perguntas anteriores dentro da mesma conversa — sem ele, cada `invoke` seria uma conversa nova e isolada. Por ser em memória, o histórico se perde quando o processo termina (aceitável para este exercício; em produção usar-se-ia um checkpointer persistente, ex. SQLite/Postgres).
-- **`perguntar(pergunta, thread_id)`**: função de conveniência que monta a mensagem do usuário, monta o `RunnableConfig` com o `thread_id` e chama `agent_chatbot.invoke(...)`, retornando apenas o texto da última mensagem da resposta (`result["messages"][-1].content`). É o ponto único de integração com o agente — tanto `main.py` quanto testes futuros chamariam essa função em vez de acessar `agent_chatbot` diretamente.
+`agent_chatbot` é um grafo LangGraph compilado, montado pelo `create_agent` (API de agentes do LangChain v1) — o modelo é resolvido direto pela string `"openai:gpt-4o-mini"`, sem precisar instanciar `ChatOpenAI` manualmente. O `checkpointer` guarda o histórico de mensagens em memória, indexado por `thread_id`; é o que dá ao agente "memória" dentro de uma conversa — sem ele cada `invoke` seria isolado. Como é em memória, o histórico some quando o processo termina (em produção entraria um checkpointer persistente, tipo SQLite/Postgres).
 
-O `thread_id` é o mecanismo do LangGraph para escopar conversas: chamadas com o mesmo `thread_id` reaproveitam o histórico salvo pelo `checkpointer`; um `thread_id` diferente começa uma conversa do zero.
+`perguntar(pergunta, thread_id)` monta a mensagem do usuário, monta o `RunnableConfig` com o `thread_id` e chama `agent_chatbot.invoke(...)`, devolvendo só o texto da última mensagem. É por essa função que `main.py` (e qualquer teste futuro) fala com o agente, em vez de acessar `agent_chatbot` direto. `thread_id` é o mecanismo do LangGraph pra escopar conversas: mesmo `thread_id` reaproveita o histórico salvo pelo `checkpointer`, `thread_id` novo começa do zero.
 
-### `main.py` — Loop de conversa no terminal
-
-Ponto de entrada da aplicação. Fluxo:
-
-1. **Carrega variáveis de ambiente** com `load_dotenv()` (lê um arquivo `.env`, se existir).
-2. **Valida `OPENAI_API_KEY`** antes de importar o agente: se a variável não estiver definida, o programa termina com `sys.exit(...)` e uma mensagem orientando a copiar `.env.example` para `.env`. Essa checagem é feita *antes* do `from questao2_chatbot_langchain.chatbot import perguntar` propositalmente — importar `chatbot.py` já dispara `create_agent(...)`, que falharia com um erro genérico da lib da OpenAI caso a chave não exista.
-3. **Gera um `thread_id`** (`uuid.uuid4()`) uma única vez por execução do programa, e o reutiliza em todas as perguntas da sessão — é isso que dá ao chatbot memória de curto prazo durante a conversa.
-4. **Loop de leitura**: `input("Você: ")` captura a pergunta do usuário.
-   - Linha vazia: ignorada, volta a pedir input.
-   - `sair` / `exit` / `quit` (case-insensitive): encerra o loop.
-   - `Ctrl+C` (`KeyboardInterrupt`) ou EOF (`Ctrl+D`): encerra o loop de forma graciosa, sem stack trace.
-5. **Resposta formatada**: cada resposta do agente é impressa com `rich.markdown.Markdown` via `Console.print`, renderizando negrito, listas, blocos de código etc. diretamente no terminal — em vez de mostrar o Markdown cru, já que o `SYSTEM_PROMPT` instrui o modelo a formatar respostas com listas e blocos de código.
+`main.py` carrega o `.env` e valida a `OPENAI_API_KEY` antes de importar o agente — a checagem vem antes do `import chatbot` de propósito, porque só importar o módulo já dispara `create_agent(...)`, e sem chave isso falharia com um erro genérico da lib da OpenAI em vez da mensagem clara que a gente quer mostrar. Depois disso, gera um `thread_id` por execução (reaproveitado em todas as perguntas da sessão, é isso que dá a memória de curto prazo) e entra num loop de `input("Você: ")`: linha vazia é ignorada, `sair`/`exit`/`quit` encerra, `Ctrl+C`/`Ctrl+D` encerra sem stack trace. Cada resposta passa por `rich.markdown.Markdown` antes de imprimir, já que o `SYSTEM_PROMPT` pede pro modelo formatar em Markdown (listas, blocos de código) e mostrar isso cru ficaria feio.
 
 ## Variáveis de ambiente
 
@@ -100,7 +81,7 @@ cp questao2_chatbot_langchain/.env.example questao2_chatbot_langchain/.env
 
 ## Exemplos de perguntas e respostas
 
-Transcrição real de uma execução (`python -m questao2_chatbot_langchain.main`), demonstrando os três comportamentos-chave do chatbot: resposta didática, memória de conversa e guardrail de escopo. A saída abaixo é o texto puro; no terminal, o `rich` renderiza listas numeradas e blocos de código com destaque de sintaxe.
+Transcrição real de uma execução (`python -m questao2_chatbot_langchain.main`), cobrindo os três comportamentos-chave: resposta didática, memória de conversa e guardrail de escopo. A saída abaixo é o texto puro; no terminal, o `rich` renderiza listas numeradas e blocos de código com destaque de sintaxe.
 
 ### 1. Pergunta normal sobre Python
 
@@ -142,7 +123,7 @@ e veja como as listas funcionam! Se tiver mais dúvidas, sinta-se à vontade par
 
 ### 2. Pergunta de acompanhamento (confirma a memória de conversa)
 
-A pergunta não repete a palavra "lista" — o bot só consegue responder corretamente porque o `thread_id` da sessão manteve o histórico da pergunta anterior no `checkpointer` (ver [`chatbot.py`](#chatbotpy--agente-e-função-de-pergunta)).
+A pergunta não repete a palavra "lista" — o bot só responde certo porque o `thread_id` da sessão manteve o histórico da pergunta anterior no `checkpointer`.
 
 ```
 Você: E como eu adiciono um item nela?
@@ -201,12 +182,13 @@ Até mais!
 
 ## Decisões de projeto e limitações conhecidas
 
-- **Memória apenas em processo (`InMemorySaver`).** O histórico da conversa não sobrevive ao encerramento do programa nem é compartilhado entre execuções — suficiente para uma demonstração via terminal, mas não para um chatbot com múltiplas sessões/usuários simultâneos, que exigiria um checkpointer persistente (ex. `SqliteSaver`/`PostgresSaver`).
-- **Um `thread_id` por execução, não por usuário.** Como o programa roda para um único usuário no terminal, um `thread_id` gerado no início do `main()` é suficiente. Numa aplicação com múltiplos usuários (ex. API web), o `thread_id` precisaria ser derivado da sessão/usuário de cada requisição.
-- **Modelo fixo no código (`openai:gpt-4o-mini`).** Não é configurável via variável de ambiente. Escolhido por ser um modelo da família GPT-4 mais barato e rápido que o `gpt-4`/`gpt-4-turbo` originais, adequado para perguntas didáticas sobre Python; trocar de modelo hoje exige editar `chatbot.py`.
-- **Sem streaming de resposta.** `agent_chatbot.invoke(...)` é síncrono e bloqueante — a resposta só aparece por completo, não token a token. O LangChain suporta streaming (`.stream()`/`.stream_events()`), mas não foi necessário para o escopo do exercício.
-- **Sem testes automatizados.** Diferente da questão 1, este exercício não tem suíte de testes. A função `perguntar()` foi extraída de propósito para ser testável isoladamente (ex. usando um fake/mocked `agent_chatbot`), caso testes sejam adicionados no futuro.
-- **Imports absolutos ("soltos"), não relativos.** Assim como na questão 1, `chatbot.py` importa `questao2_chatbot_langchain.prompt` como se a raiz do repositório fosse a raiz do projeto Python. Por isso a aplicação precisa ser executada com `python -m questao2_chatbot_langchain.main` a partir da raiz do repositório (e não `python main.py` de dentro da pasta).
+A memória do chatbot vive só em processo (`InMemorySaver`) — some quando o programa termina e não é compartilhada entre execuções. Pra uma demonstração via terminal é suficiente; um chatbot com múltiplas sessões/usuários simultâneos precisaria de um checkpointer persistente, tipo `SqliteSaver`/`PostgresSaver`. Na mesma linha, o `thread_id` é gerado uma vez por execução, não por usuário — funciona porque o programa atende um usuário só no terminal; numa API web ele teria que vir da sessão de cada requisição.
+
+O modelo (`openai:gpt-4o-mini`) está fixo no código, não é configurável por variável de ambiente. Escolhi ele por ser mais barato e rápido que `gpt-4`/`gpt-4-turbo` e dar conta bem de perguntas didáticas sobre Python; trocar de modelo hoje significa editar `chatbot.py` na mão.
+
+Não tem streaming: `agent_chatbot.invoke(...)` é síncrono, a resposta só aparece inteira, não token a token. O LangChain suporta `.stream()`/`.stream_events()`, mas não precisei disso pro escopo do exercício. Também não tem testes automatizados, diferente da questão 1 — deixei `perguntar()` como função isolada de propósito, pra ficar fácil testar depois com um `agent_chatbot` mockado.
+
+Por fim, os imports são absolutos, não relativos: `chatbot.py` importa `questao2_chatbot_langchain.prompt` como se a raiz do repositório fosse a raiz do projeto Python, o mesmo padrão da questão 1. Por isso a aplicação precisa rodar com `python -m questao2_chatbot_langchain.main` a partir da raiz, e não `python main.py` de dentro da pasta.
 
 ---
 
