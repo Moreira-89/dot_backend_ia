@@ -210,4 +210,4 @@ Até mais!
 
 ---
 
-⬅ [Questão 1 — API de Livros](questao1_api_livros.md)
+⬅ [Questão 1 — API de Livros](questao1_api_livros.md) | [Questão 3 — Busca Semântica](questao3_busca_semantica.md) ➡
