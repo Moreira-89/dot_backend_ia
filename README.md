@@ -1,5 +1,19 @@
-# dot_backend_ia
+# DOT Digital Group - Backend IA
+
 Desafio técnico Backend + IA: API de livros, chatbot com Langchain e busca semântica com embeddings.
+
+## Requisitos
+
+- Python 3.14+
+- Uma única dependência instalada cobre as três questões:
+
+```bash
+python3 -m venv .venv
+
+.venv/bin/pip install -r requirements.txt
+```
+
+> As Questões 2 e 3 exigem uma chave da API da OpenAI (`OPENAI_API_KEY`). Veja o `.env.example` de cada questão.
 
 ## Questões
 
